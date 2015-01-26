@@ -23,9 +23,9 @@
 
 这就是Router的ServeHTTP。整个处理流程大概是这样的：
 
-1. 首先根据请求的Method获取routers中的tree。Router结构体中存在一个routers字段，类型是键为字符串、值为*Tree的map。Router结构体扮演了Macaron中的路由层。
+1. 首先根据请求的Method（GET/POST等等之一）获取routers中对应的tree。tree保存在哪里呢？Router结构体中存在一个routers字段，类型是键为字符串、值为*Tree的map。Router结构体扮演了Macaron中的路由层。
 
-2. tree调用Match方法去匹配用户请求的路由，匹配到了会返回一个handler处理函数，以及包含在路由中的参数。如果用户设置的路由是 *（也就是任意匹配），那么路径会被以"/"号分割，每一段都作为参数值，下标以数字字符串“0”开始，“1”、“2”以此递增。
+2. 获取到的Tree调用Match方法去匹配用户请求的路由，匹配到了会返回一个handler处理函数，以及包含在路由中的参数。如果用户设置的路由是 *（也就是任意匹配），那么路径会被以"/"号分割，其中每一段都将作为参数值保存起来，下标以数字字符串“0”开始，“1”、“2”以此递增。
 
 3. 执行handler，并传入三个参数：http.ResponseWriter、*http.Request、params
 
@@ -33,15 +33,15 @@
 
 写到这边，Macaron的执行逻辑基本上已经清楚了，剩下的无非就是路由如何注册、中间件如何注册、路由具体如何去匹配这些问题。等等，还没看看handler里面做了什么呢，继续。
 
-先来看看Match到路由后返回的第一个值是什么
+先来看看匹配到对应路由后，返回的第一个值Handle是什么
 
 	// Handle is a function that can be registered to a route to handle HTTP requests.
 	// Like http.HandlerFunc, but has a third parameter for the values of wildcards (variables).
 	type Handle func(http.ResponseWriter, *http.Request, Params)
 
-我可不曾记得我曾经传入过带有这种函数签名的函数指针给Macaron，那这究竟是怎么来的呢，先在该回过头去看看注册路由的时候Macaron做了哪些处理。
+我可不曾记得我曾经（也就是注册中间件和路由的时候）传入过带有这种函数签名的函数指针给Macaron，那这究竟是怎么来的呢，现在该回过头去看看注册路由的时候Macaron做了哪些处理。
 
-Macaron中路由注册非常简单，通过Macaron上下文对象调用`Get(pattern string, h ...Handler)`、Post、Put、Delete等等即可注册相应Method的路由。第一个参数必备，为路由规则，之后是不定长个数的Handler，Handler是什么呢，回过头去入门篇看看，在Macaron中Handler被称为处理器，是整个Macaron的灵魂和核心。有一种情况是，如果我只写了路由规则，而不传入任何处理器，那这个路由有意义吗？当然有，别忘了Macaron的中间件。任何路由都会被所有已注册的中间件洗礼一遍，也许中间件已经做了足够的事情，因此处理器不是必须的。
+Macaron中路由注册非常简单，通过Macaron上下文对象调用`Get(pattern string, h ...Handler)`、Post、Put、Delete等等即可注册相应Method的路由。第一个参数必备，为路由规则，之后是不定长个数的Handler，Handler是什么呢，回过头去入门篇看看，在Macaron中Handler被称为处理器，是整个Macaron的灵魂和核心。有一种情况是，如果我只写了路由规则，而不传入任何处理器，那这个路由有意义吗？当然有，别忘了Macaron的中间件。任何路由都会被所有已注册的中间件处理一遍，也许中间件已经做了足够的事情，因此处理器不是必须的。
 
 继续看，无论Get、Post等等方法，都是调用了`Handle(method string, pattern string, handlers []Handler) `这个方法。
 
@@ -86,7 +86,7 @@ Macaron中路由注册非常简单，通过Macaron上下文对象调用`Get(patt
 
 这段代码应该是真正把路由和相应的处理函数存入到tree（之前提过，还记得Match的过程么？）中。
 
-看看这个匿名的处理函数他会做哪些事：
+注意第三个参数，也就是这个匿名的处理函数他会做哪些事：
 1. 首先创建了一个context对象，这个对象的生命周期基本上就是伴随用户的一次请求。
 2. 为这个context配置参数和处理器。
 3. 运行run()。
@@ -94,4 +94,3 @@ Macaron中路由注册非常简单，通过Macaron上下文对象调用`Get(patt
 注意，当前只是注册这个处理函数而已，并没有运行。具体什么时候运行，上面有提到！
 
 好了，离揭开macaron最后的面纱越来越接近了....^_^
-
